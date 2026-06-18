@@ -2,12 +2,13 @@
 """
 Knowledge Work Plugins → 多平台迁移转换器
 
-将 Claude Code 的 SKILL.md 文件转换为 Codex、Trae、Hermes 三种目标格式。
+将 Claude Code 的 SKILL.md 文件转换为 Codex、Trae、Hermes、Qoder 四种目标格式。
 
 用法:
     python migrate_skills.py --target codex   --input ./sales --output ./codex-plugins/sales
     python migrate_skills.py --target trae    --input ./sales --output ./trae-rules/sales
     python migrate_skills.py --target hermes  --input ./sales --output ./hermes-plugins/sales
+    python migrate_skills.py --target qoder   --input ./sales --output ./qoder-plugins/sales
     python migrate_skills.py --target all     --input ./sales --output ./migrated/sales
 """
 
@@ -90,6 +91,28 @@ def convert_to_trae(meta: dict, body: str, plugin_name: str) -> str:
     return _format_skill_md(trae_meta, body)
 
 
+def convert_to_qoder(meta: dict, body: str, plugin_name: str) -> str:
+    """转换为 Qoder 技能格式。
+
+    Qoder 插件架构与 Claude Code 几乎完全一致：
+    - .qoder-plugin/plugin.json（仅目录名不同）
+    - skills/*/SKILL.md（格式完全相同）
+    - commands/*.md（格式完全相同）
+    - agents/*.md（格式完全相同）
+    - .mcp.json（格式完全相同）
+
+    SKILL.md 无需任何格式转换，直接复制即可。
+    唯一需要处理的是占位符 ~~category 的替换。
+    """
+    name = meta.get("name", "unknown")
+    desc = meta.get("description", "")
+
+    body = _replace_placeholders(body)
+
+    # Qoder SKILL.md 格式与 Claude 完全相同，直接返回
+    return _format_skill_md(meta, body)
+
+
 def convert_to_hermes(meta: dict, body: str, plugin_name: str) -> str:
     """转换为 Hermes 技能格式。
 
@@ -156,8 +179,8 @@ def convert_mcp_config(source_path: Path, target: str) -> dict | None:
     with open(mcp_file) as f:
         config = json.load(f)
 
-    if target == "codex":
-        # Codex 使用相同的 MCP 格式
+    if target in ("codex", "qoder"):
+        # Codex 和 Qoder 使用相同的 MCP 格式，无需转换
         return config
     elif target == "trae":
         # Trae 使用 mcpServers 数组格式
@@ -197,6 +220,9 @@ def convert_plugin_manifest(source_path: Path, target: str) -> dict | None:
             "description": manifest.get("description", ""),
             "author": manifest.get("author", {}),
         }
+    elif target == "qoder":
+        # Qoder 使用 .qoder-plugin/plugin.json，格式与 Claude 完全相同
+        return manifest
     elif target == "hermes":
         return {
             "name": manifest.get("name", ""),
@@ -295,6 +321,11 @@ def migrate_plugin(source_dir: Path, output_dir: Path, target: str):
             os.makedirs(output_dir / ".codex-plugin", exist_ok=True)
             with open(output_dir / ".codex-plugin" / "plugin.json", "w") as f:
                 json.dump(manifest, f, indent=2)
+        elif target == "qoder":
+            # Qoder 使用 .qoder-plugin/plugin.json（与 Claude 格式完全相同）
+            os.makedirs(output_dir / ".qoder-plugin", exist_ok=True)
+            with open(output_dir / ".qoder-plugin" / "plugin.json", "w") as f:
+                json.dump(manifest, f, indent=2)
 
     # 2. 转换 MCP 配置
     mcp_config = convert_mcp_config(source_dir, target)
@@ -331,11 +362,11 @@ def migrate_plugin(source_dir: Path, output_dir: Path, target: str):
         meta, body = parse_frontmatter(content)
         skill_name = meta.get("name", skill_dir.name)
 
-        if target == "codex":
-            # Codex: 保持相同目录结构 skills/skill-name/SKILL.md
+        if target == "codex" or target == "qoder":
+            # Codex / Qoder: 保持相同目录结构 skills/skill-name/SKILL.md
             codex_skill_dir = output_dir / "skills" / skill_name
             codex_skill_dir.mkdir(parents=True, exist_ok=True)
-            output = convert_to_codex(meta, body, plugin_name)
+            output = convert_to_codex(meta, body, plugin_name) if target == "codex" else convert_to_qoder(meta, body, plugin_name)
             with open(codex_skill_dir / "SKILL.md", "w") as f:
                 f.write(output)
 
@@ -379,12 +410,19 @@ def migrate_plugin(source_dir: Path, output_dir: Path, target: str):
 
     # 5. 转换命令
     commands_dir = source_dir / "commands"
-    if commands_dir.exists() and target in ("codex",):
-        codex_cmd_dir = output_dir / "commands"
-        codex_cmd_dir.mkdir(parents=True, exist_ok=True)
-        _copy_dir(commands_dir, codex_cmd_dir)
+    if commands_dir.exists() and target in ("codex", "qoder"):
+        cmd_output_dir = output_dir / "commands"
+        cmd_output_dir.mkdir(parents=True, exist_ok=True)
+        _copy_dir(commands_dir, cmd_output_dir)
 
-    # 6. 复制 CONNECTORS.md 和 README.md
+    # 6. 复制 agents（Qoder 支持 agents）
+    agents_dir = source_dir / "agents"
+    if agents_dir.exists() and target in ("qoder",):
+        agent_output_dir = output_dir / "agents"
+        agent_output_dir.mkdir(parents=True, exist_ok=True)
+        _copy_dir(agents_dir, agent_output_dir)
+
+    # 7. 复制 CONNECTORS.md 和 README.md
     for fname in ["CONNECTORS.md", "README.md", "LICENSE", "LICENSE.txt"]:
         src = source_dir / fname
         if src.exists():
@@ -491,7 +529,7 @@ def main():
   python migrate_skills.py --target trae --skill ./skills/call-prep/SKILL.md --output ./rules/call-prep.md
         """,
     )
-    parser.add_argument("--target", choices=["codex", "trae", "hermes", "all"],
+    parser.add_argument("--target", choices=["codex", "trae", "hermes", "qoder", "all"],
                         default="all", help="目标平台")
     parser.add_argument("--input", type=Path, help="源插件目录")
     parser.add_argument("--output", type=Path, required=True, help="输出目录")
@@ -503,7 +541,7 @@ def main():
 
     args = parser.parse_args()
 
-    targets = ["codex", "trae", "hermes"] if args.target == "all" else [args.target]
+    targets = ["codex", "trae", "hermes", "qoder"] if args.target == "all" else [args.target]
 
     if args.skill:
         # 单文件迁移

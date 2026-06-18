@@ -1,6 +1,6 @@
 # Knowledge Work Plugins → 多平台迁移指南
 
-> 将 Anthropic Knowledge Work Plugins 中的 17 个内置插件迁移到 Codex、Hermes、Trae Work 三个平台。
+> 将 Anthropic Knowledge Work Plugins 中的 17 个内置插件迁移到 Codex、Hermes、Trae Work、Qoder 四个平台。
 
 ---
 
@@ -8,12 +8,13 @@
 
 1. [迁移总览](#1-迁移总览)
 2. [平台兼容性矩阵](#2-平台兼容性矩阵)
-3. [第一步：Codex 迁移](#3-第一步codex-迁移)
-4. [第二步：Trae Work 迁移](#4-第二步trae-work-迁移)
-5. [第三步：Hermes 迁移](#5-第三步hermes-迁移)
-6. [自动化迁移脚本](#6-自动化迁移脚本)
-7. [迁移后验证清单](#7-迁移后验证清单)
-8. [注意事项与限制](#8-注意事项与限制)
+3. [第一步：Qoder 迁移（最优先）](#3-第一步qoder-迁移最优先)
+4. [第二步：Codex 迁移](#4-第二步codex-迁移)
+5. [第三步：Trae Work 迁移](#5-第三步trae-work-迁移)
+6. [第四步：Hermes 迁移](#6-第四步hermes-迁移)
+7. [自动化迁移脚本](#7-自动化迁移脚本)
+8. [迁移后验证清单](#8-迁移后验证清单)
+9. [注意事项与限制](#9-注意事项与限制)
 
 ---
 
@@ -21,31 +22,34 @@
 
 ### 1.1 核心资产与可迁移性
 
-| 资产 | 格式 | Codex | Trae | Hermes | 迁移难度 |
-|------|------|-------|------|--------|---------|
-| **SKILL.md** (技能定义) | Markdown + YAML Frontmatter | ✅ 直接复用 | ✅ 转为 Rules | ✅ 直接复用 | 低 |
-| **plugin.json** (插件清单) | JSON | ✅ 直接复用 | ❌ 无需 | ✅ 转为 YAML | 低 |
-| **.mcp.json** (MCP 配置) | JSON | ✅ 直接复用 | ⚠️ 需微调 | ✅ 直接复用 | 低 |
-| **commands/*.md** (斜杠命令) | Markdown | ✅ 直接复用 | ❌ 不支持 | ⚠️ 需 Python 包装 | 中 |
-| **scripts/*.py** (Python 脚本) | Python | ✅ 直接复用 | ❌ 不支持 | ✅ 直接复用 | 低 |
-| **agents/*.md** (子代理) | Markdown | ⚠️ 待支持 | ❌ 不支持 | ❌ 不支持 | 高 |
-| **references/*.md** (参考文档) | Markdown | ✅ 直接复用 | ✅ 直接复用 | ✅ 直接复用 | 低 |
+| 资产 | 格式 | Codex | Trae | Hermes | Qoder | 迁移难度 |
+|------|------|-------|------|--------|-------|---------|
+| **SKILL.md** (技能定义) | Markdown + YAML Frontmatter | ✅ 直接复用 | ✅ 转为 Rules | ✅ 直接复用 | ✅ 直接复用 | 低 |
+| **plugin.json** (插件清单) | JSON | ✅ 直接复用 | ❌ 无需 | ✅ 转为 YAML | ✅ 直接复用（仅目录名不同） | 低 |
+| **.mcp.json** (MCP 配置) | JSON | ✅ 直接复用 | ⚠️ 需微调 | ✅ 直接复用 | ✅ 直接复用 | 低 |
+| **commands/*.md** (斜杠命令) | Markdown | ✅ 直接复用 | ❌ 不支持 | ⚠️ 需 Python 包装 | ✅ 直接复用 | 低 |
+| **scripts/*.py** (Python 脚本) | Python | ✅ 直接复用 | ❌ 不支持 | ✅ 直接复用 | ✅ 直接复用 | 低 |
+| **agents/*.md** (子代理) | Markdown | ⚠️ 待支持 | ❌ 不支持 | ❌ 不支持 | ✅ 直接复用 | 低 |
+| **references/*.md** (参考文档) | Markdown | ✅ 直接复用 | ✅ 直接复用 | ✅ 直接复用 | ✅ 直接复用 | 低 |
 
 ### 1.2 迁移决策树
 
 ```
 你要迁移的是？
 ├── 技能的知识内容（SKILL.md 的正文）
+│   ├── → Qoder: 几乎零改动，直接放 skills/ 目录
 │   ├── → Codex: 几乎零改动，直接放 skills/ 目录
 │   ├── → Trae: 转为 .trae/rules/{name}.md，设智能生效模式
 │   └── → Hermes: 直接放 skills/ 目录，通过 register_skill() 注册
 │
 ├── MCP 工具连接配置（.mcp.json）
+│   ├── → Qoder: 直接复制，格式完全兼容
 │   ├── → Codex: 直接复制，格式完全兼容
 │   ├── → Trae: 转为 .trae/mcp.json，URL 类型相同
 │   └── → Hermes: 直接复制，格式兼容
 │
 ├── 斜杠命令（commands/）
+│   ├── → Qoder: 直接复制，格式兼容
 │   ├── → Codex: 直接复制，格式兼容
 │   ├── → Trae: 不支持斜杠命令，转为 Rules 中的触发词
 │   └── → Hermes: 通过 ctx.register_command() 注册
@@ -60,31 +64,113 @@
 
 ## 2. 平台兼容性矩阵
 
-### 2.1 三平台架构对比
+### 2.1 四平台架构对比
 
-| 特性 | Claude Code | Codex | Trae Work | Hermes |
-|------|-------------|-------|-----------|--------|
-| **插件清单** | `.claude-plugin/plugin.json` | `.codex-plugin/plugin.json` | 无 | `plugin.yaml` |
-| **技能/规则** | `skills/*/SKILL.md` | `skills/*/SKILL.md` | `.trae/rules/*.md` | `skills/*/SKILL.md` |
-| **MCP 配置** | `.mcp.json` | `.mcp.json` | `.trae/mcp.json` | `mcp.json` |
-| **斜杠命令** | `commands/*.md` | `commands/*.md` | 不支持 | `ctx.register_command()` |
-| **子代理** | `agents/*.md` | 开发中 | 不支持 | 不支持 |
-| **触发机制** | 自动 + 手动 | `$skill-name` 语法 | 智能生效/手动 `#Rule` | `skill_view()` |
-| **插件安装** | `claude plugin install` | 目录安装 / 市场 | 手动复制到项目 | `~/.hermes/plugins/` |
+| 特性 | Claude Code | Qoder | Codex | Trae Work | Hermes |
+|------|-------------|-------|-------|-----------|--------|
+| **插件清单** | `.claude-plugin/plugin.json` | `.qoder-plugin/plugin.json` | `.codex-plugin/plugin.json` | 无 | `plugin.yaml` |
+| **技能/规则** | `skills/*/SKILL.md` | `skills/*/SKILL.md` | `skills/*/SKILL.md` | `.trae/rules/*.md` | `skills/*/SKILL.md` |
+| **MCP 配置** | `.mcp.json` | `.mcp.json` | `.mcp.json` | `.trae/mcp.json` | `mcp.json` |
+| **斜杠命令** | `commands/*.md` | `commands/*.md` | `commands/*.md` | 不支持 | `ctx.register_command()` |
+| **子代理** | `agents/*.md` | `agents/*.md` | 开发中 | 不支持 | 不支持 |
+| **触发机制** | 自动 + 手动 | 自动 + 手动 | `$skill-name` 语法 | 智能生效/手动 `#Rule` | `skill_view()` |
+| **插件安装** | `claude plugin install` | `qoder plugin install` | 目录安装 / 市场 | 手动复制到项目 | `~/.hermes/plugins/` |
+| **兼容度** | — | ✨ 99% | 98% | 70% | 60% |
 
 ### 2.2 迁移优先级建议
 
 | 优先级 | 平台 | 理由 |
 |--------|------|------|
-| P0（最优先） | **Codex** | 架构最相似，迁移成本最低，几乎 1:1 映射 |
-| P1 | **Trae Work** | 格式简单，仅需转换 Markdown 到 Rules |
-| P2 | **Hermes** | 需要额外编写 Python 包装代码，但技能内容可直接复用 |
+| P0（最优先） | **Qoder** | 架构与 Claude Code 几乎完全一致，仅需将 `.claude-plugin` 改名为 `.qoder-plugin` |
+| P1 | **Codex** | 架构高度相似，几乎 1:1 映射，仅需极小调整 |
+| P2 | **Trae Work** | 格式简单，需将 SKILL.md 转为 Rules 格式 |
+| P3 | **Hermes** | 需要额外编写 Python 包装代码，但技能内容可直接复用 |
 
 ---
 
-## 3. 第一步：Codex 迁移
+## 3. 第一步：Qoder 迁移（最优先）
 
-### 3.1 架构对应关系
+### 3.1 为什么 Qoder 最容易
+
+Qoder 的插件系统与 Claude Code **几乎完全一致**。根据 Qoder 官方文档，插件结构如下：
+
+| 组件 | Claude Code | Qoder |
+|------|-------------|-------|
+| 插件清单 | `.claude-plugin/plugin.json` | `.qoder-plugin/plugin.json` |
+| 技能 | `skills/*/SKILL.md` | `skills/*/SKILL.md` |
+| 命令 | `commands/*.md` | `commands/*.md` |
+| 子代理 | `agents/*.md` | `agents/*.md` |
+| MCP 配置 | `.mcp.json` | `.mcp.json` |
+
+**唯一的差异：** 清单目录名从 `.claude-plugin` 改为 `.qoder-plugin`。
+
+### 3.2 架构对应关系
+
+```
+Claude Code 插件                    Qoder 插件
+─────────────────────────────────────────────────────
+.claude-plugin/plugin.json    ←→   .qoder-plugin/plugin.json
+skills/call-prep/SKILL.md     ←→   skills/call-prep/SKILL.md
+skills/call-prep/scripts/     ←→   skills/call-prep/scripts/
+skills/call-prep/references/  ←→   skills/call-prep/references/
+commands/call-summary.md      ←→   commands/call-summary.md
+agents/agent-name.md          ←→   agents/agent-name.md
+.mcp.json                     ←→   .mcp.json
+CONNECTORS.md                 ←→   CONNECTORS.md
+```
+
+### 3.3 手动迁移步骤
+
+```bash
+# 1. 创建 Qoder 插件目录
+mkdir -p ~/.qoder/plugins/sales
+
+# 2. 复制并重命名清单目录（唯一需要改的地方）
+cp -r sales/.claude-plugin sales/.qoder-plugin
+cp -r sales/.qoder-plugin ~/.qoder/plugins/sales/.qoder-plugin
+
+# 3. 技能、命令、代理、MCP 配置全部直接复制（无需修改）
+cp -r sales/skills ~/.qoder/plugins/sales/
+cp -r sales/commands ~/.qoder/plugins/sales/
+cp -r sales/agents ~/.qoder/plugins/sales/   # 如有
+cp sales/.mcp.json ~/.qoder/plugins/sales/
+
+# 4. 复制其他文件
+cp sales/CONNECTORS.md sales/README.md ~/.qoder/plugins/sales/
+```
+
+### 3.4 插件安装
+
+```bash
+# 安装插件
+qoder plugin install ~/.qoder/plugins/sales
+
+# 或从 Git 仓库安装
+qoder plugin install your-org/qoder-knowledge-plugins
+
+# 使用技能（自动触发，支持插件限定名）
+# sales:call-prep 或直接 call-prep
+```
+
+### 3.5 唯一需要手动调整的地方
+
+占位符 `~~category` 需要替换为实际的 MCP 服务器名称（迁移脚本已自动处理为通用描述）：
+
+```markdown
+# 原始
+Check your ~~CRM for account history
+
+# 迁移后
+Check your CRM system for account history
+# 或手动改为具体工具
+Check your HubSpot for account history
+```
+
+---
+
+## 4. 第二步：Codex 迁移
+
+### 4.1 架构对应关系
 
 ```
 Claude Code 插件                    Codex 插件
@@ -98,7 +184,7 @@ commands/call-summary.md      ←→   commands/call-summary.md
 CONNECTORS.md                 ←→   CONNECTORS.md
 ```
 
-### 3.2 手动迁移步骤
+### 4.2 手动迁移步骤
 
 ```bash
 # 1. 创建 Codex 插件目录
@@ -120,13 +206,13 @@ cp sales/.mcp.json ~/.codex/plugins/sales/
 cp sales/CONNECTORS.md sales/README.md ~/.codex/plugins/sales/
 ```
 
-### 3.3 需要手动调整的地方
+### 4.3 需要手动调整的地方
 
 1. **SKILL.md 中的占位符**: 将 `~~CRM`、`~~chat` 等替换为实际的 MCP 服务器名称
 2. **触发词**: Codex 使用 `$skill-name` 语法，在 description 中添加 `Trigger with "$call-prep"`
 3. **子代理**: 如果原插件有 `agents/`，暂时保留等待 Codex 支持
 
-### 3.4 插件安装
+### 4.4 插件安装
 
 ```bash
 # 方式一：本地目录安装
@@ -141,9 +227,9 @@ $call-prep Acme Corp
 
 ---
 
-## 4. 第二步：Trae Work 迁移
+## 5. 第三步：Trae Work 迁移
 
-### 4.1 架构对应关系
+### 5.1 架构对应关系
 
 ```
 Claude Code 插件                    Trae Work 配置
@@ -154,7 +240,7 @@ plugin.json                   ←→   （无对应，metadata 写入 rule 描�
 commands/*.md                 ←→   （转为 Rules 中的触发词说明）
 ```
 
-### 4.2 手动迁移步骤
+### 5.2 手动迁移步骤
 
 ```bash
 # 1. 在项目中创建 Trae 配置目录
@@ -168,7 +254,7 @@ mkdir -p your-project/.trae/rules
 #    将 .mcp.json 复制为 .trae/mcp.json，格式微调
 ```
 
-### 4.3 SKILL.md → Trae Rule 转换规则
+### 5.3 SKILL.md → Trae Rule 转换规则
 
 **原始 SKILL.md frontmatter**:
 ```yaml
@@ -194,7 +280,7 @@ enabled: true
 - `alwaysApply: false` → 智能生效模式（推荐）
 - 正文内容 → 保留，但开头的 `# Skill Name` 标题替换为 `# Trae Rule: {plugin}/{skill}`
 
-### 4.4 .mcp.json → Trae MCP 配置转换
+### 5.4 .mcp.json → Trae MCP 配置转换
 
 **原始格式**:
 ```json
@@ -222,7 +308,7 @@ enabled: true
 }
 ```
 
-### 4.5 部署到 Trae IDE
+### 5.5 部署到 Trae IDE
 
 ```bash
 # 1. 将 Rules 文件复制到项目
@@ -238,9 +324,9 @@ cp .trae/mcp.json your-project/.trae/
 
 ---
 
-## 5. 第三步：Hermes 迁移
+## 6. 第四步：Hermes 迁移
 
-### 5.1 架构对应关系
+### 6.1 架构对应关系
 
 ```
 Claude Code 插件                    Hermes 插件
@@ -277,7 +363,7 @@ cp .mcp.json ~/.hermes/plugins/sales/mcp.json
 # 5. 创建 Python 注册入口
 ```
 
-### 5.3 创建 Python 注册入口
+### 6.3 创建 Python 注册入口
 
 **`__init__.py`** — 核心注册文件:
 
@@ -317,7 +403,7 @@ def register(ctx):
 # 如需添加自定义工具，在此实现处理函数
 ```
 
-### 5.4 启用插件
+### 6.4 启用插件
 
 ```bash
 # 启用插件
@@ -332,17 +418,17 @@ hermes plugins
 
 ---
 
-## 6. 自动化迁移脚本
+## 7. 自动化迁移脚本
 
 项目根目录提供了 `migrate_skills.py` 脚本，可一键完成所有迁移。
 
-### 6.1 安装依赖
+### 7.1 安装依赖
 
 ```bash
 pip install pyyaml
 ```
 
-### 6.2 基本用法
+### 7.2 基本用法
 
 ```bash
 # 迁移单个插件到 Codex
@@ -367,7 +453,7 @@ python migrate_skills.py --target trae \
   --output ./rules/call-prep.md
 ```
 
-### 6.3 脚本输出结构
+### 7.3 脚本输出结构
 
 迁移后，输出目录结构如下：
 
@@ -407,9 +493,18 @@ migrated/
 
 ---
 
-## 7. 迁移后验证清单
+## 8. 迁移后验证清单
 
-### 7.1 Codex 验证
+### 8.1 Qoder 验证
+
+- [ ] `.qoder-plugin/plugin.json` 格式正确，能被 Qoder 识别
+- [ ] 技能文件在对话中能自动触发
+- [ ] MCP 服务器连接正常
+- [ ] 斜杠命令 `/command` 可正常调用
+- [ ] 子代理 `agents/` 可正常加载
+- [ ] 占位符 `~~category` 已替换为实际工具名
+
+### 8.2 Codex 验证
 
 - [ ] `plugin.json` 格式正确，能被 Codex 识别
 - [ ] 技能文件在 `$skill-name` 调用时能正确加载
@@ -417,7 +512,7 @@ migrated/
 - [ ] 斜杠命令 `/command` 可正常调用
 - [ ] 占位符 `~~category` 已替换为实际工具名
 
-### 7.2 Trae Work 验证
+### 8.3 Trae Work 验证
 
 - [ ] `.trae/rules/*.md` 文件格式正确
 - [ ] `description` 字段能触发智能生效
@@ -425,7 +520,7 @@ migrated/
 - [ ] 在 Trae IDE 中打开项目后 Rules 被加载
 - [ ] 通过 `#Rule` 手动触发时内容正确
 
-### 7.3 Hermes 验证
+### 8.4 Hermes 验证
 
 - [ ] `plugin.yaml` 格式正确
 - [ ] `hermes plugins list` 能看到插件
@@ -435,30 +530,36 @@ migrated/
 
 ---
 
-## 8. 注意事项与限制
+## 9. 注意事项与限制
 
-### 8.1 通用限制
+### 9.1 通用限制
 
 | 限制 | 说明 | 解决方案 |
 |------|------|---------|
-| 占位符 `~~category` | 三个平台都不支持这种 Claude 特有的占位符 | 脚本已自动替换为通用描述；实际使用时需手动改为具体工具名 |
+| 占位符 `~~category` | 四个平台都不支持这种 Claude 特有的占位符 | 脚本已自动替换为通用描述；实际使用时需手动改为具体工具名 |
 | 子代理 `agents/` | 只有 Claude Code 支持子代理，Codex 开发中 | 暂不迁移，保留原文件等待支持 |
 | 插件间交叉引用 | 原插件中 `sales/call-prep → sales/account-research` 的引用关系 | 迁移后需手动检查路径引用 |
 
-### 8.2 Codex 特定限制
+### 9.2 Qoder 特定限制
+
+- Qoder 暂不支持通过 `qoder plugin marketplace` 添加外部市场 URL
+- 插件需手动复制到 `~/.qoder/plugins/` 目录，或通过 `qoder plugin install` 安装
+- 子代理功能与 Claude Code 兼容，但部分高级特性可能不同
+
+### 9.3 Codex 特定限制
 
 - Codex 技能使用 `$skill-name` 语法触发，与 Claude 的自动触发不同
 - 建议在 `description` 字段中明确写出触发词
 - 子代理功能仍在开发中，`agents/` 目录暂不可用
 
-### 8.3 Trae Work 特定限制
+### 9.4 Trae Work 特定限制
 
 - Trae 不支持插件清单概念，`plugin.json` 元数据写入 `description` 字段
 - 不支持斜杠命令，命令内容转为 Rule 中的触发词说明
 - 不支持 Python 脚本执行
 - MCP 配置格式为数组而非对象，需转换
 
-### 8.4 Hermes 特定限制
+### 9.5 Hermes 特定限制
 
 - 需要编写 Python 插件包装代码（`__init__.py` 等）
 - 技能通过 `skill_view()` 加载，触发方式与 Claude 不同
@@ -474,6 +575,7 @@ migrated/
 python migrate_skills.py --target all --all-plugins --output ./migrated
 
 # ─── 单插件迁移 ───
+python migrate_skills.py --target qoder  --input ./sales --output ./migrated/sales
 python migrate_skills.py --target codex  --input ./sales --output ./migrated/sales
 python migrate_skills.py --target trae   --input ./sales --output ./migrated/sales
 python migrate_skills.py --target hermes --input ./sales --output ./migrated/sales
@@ -483,6 +585,9 @@ python migrate_skills.py --target trae --skill ./skills/call-prep/SKILL.md \
   --plugin-name sales --output ./rules/call-prep.md
 
 # ─── 部署到各平台 ───
+# Qoder
+cp -r migrated/qoder/sales ~/.qoder/plugins/
+
 # Codex
 cp -r migrated/codex/sales ~/.codex/plugins/
 
